@@ -119,7 +119,7 @@ class PWMShiftRegister(Device):
     self._state = [0.0] * outputs
 
     self._running = True
-    self._pwm_thread = Thread(target=self._pwm_runner)
+    self._pwm_thread = Thread(target=self._pwm_runner, daemon=True)
     self._pwm_thread.start()
 
   def _pwm_runner(self):
