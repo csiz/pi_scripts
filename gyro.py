@@ -9,33 +9,19 @@ A German guy does (https://tutorials-raspberrypi.com/measuring-rotation-and-acce
 1. Take out of sleep mode.
 2. Start reading data. (short and simple, so I picked the other guy's way...)
 
-Transforming 16bit 2's complement:
-
-    if (val >= 0x8000):
-      return -((65535 - val) + 1)
-
 `SMBUS(1)` stands for revision 1.
 """
 
 from smbus import SMBbus # pylint: disable=import-error
 from threading import Thread
-from queue import Queue, Empty
 from time import sleep, monotonic
 import asyncio
 from math import pi
 
 
+from oberserver import EventRouter
 
-def _get_instant_measures(bus, address):
-  raise NotImplementedError
-  # To read data we should:
-  #     0. Use DATA_RDY_EN to enable interrupts on data.
-  #     1. Read INT_STATUS and check DATA_RDY_INT is set.
-  #     2. Read all values from sensor registers as fast as possible (in Python...).
-  #     3. Read INT_STATUS and check DATA_RDY_INT was not set, otherwise we read half fucked data, so retry reading.
-
-
-class Gyro:
+class Gyro(EventRouter):
   ADDRESS = 0x68
 
   # Registers we use:
@@ -46,6 +32,22 @@ class Gyro:
   FIFO_EN = 0x23
   INT_ENABLE = 0x38
   INT_STATUS = 0x3A
+
+  ACCEL_XOUT_H = 0x3B
+  ACCEL_XOUT_L = 0x3C
+  ACCEL_YOUT_H = 0x3D
+  ACCEL_YOUT_L = 0x3E
+  ACCEL_ZOUT_H = 0x3F
+  ACCEL_ZOUT_L = 0x40
+  TEMP_OUT_H = 0x41
+  TEMP_OUT_L = 0x42
+  GYRO_XOUT_H = 0x43
+  GYRO_XOUT_L = 0x44
+  GYRO_YOUT_H = 0x45
+  GYRO_YOUT_L = 0x46
+  GYRO_ZOUT_H = 0x47
+  GYRO_ZOUT_L = 0x48
+
   USER_CTRL = 0x6A
   PWR_MGMT_1 = 0x6B
   FIFO_COUNTH = 0x72
@@ -74,6 +76,16 @@ class Gyro:
       self.acceleration = acceleration
       self.rotation = rotation
 
+    def __repr__(self):
+      return "Gyro.Measure(time={}, duration={}, acceleration={}, rotation={})".format(
+        self.time,
+        self.duration,
+        self.acceleration,
+        self.rotation,
+      )
+
+  class StopWorker(Exception):
+    pass
 
   def __init__(
       self,
@@ -85,6 +97,18 @@ class Gyro:
 
     Args:
       AD0: Whether the address bit is set (connected to 3V3). The sensor addres is 0x68+AD0.
+
+    Events:
+      measure: Receives the latest Gyro.Measure from the gyro.
+      exception: Exception that occured while reading the gyro.
+      test_results: Test results from a gyro self test.
+      start: Time when the sensor starts (or restarts after reset).
+      discarded: Some measures were discared, because sensor overflow or range change.
+
+    Commands:
+      stop: Stop the worker thread.
+      reset: Reset the devie and re-setup.
+      sensor_range: Set the sensor range to whatever.
     """
 
     # Connect to the I2C serial bus version 1.
@@ -97,30 +121,40 @@ class Gyro:
     # Measurement range index (for both acceleration and gyro).
     self.sensors_range = None
 
-    # We'll use a worker thread to manage the device as we need to keep getting data from it fairly often.
-    self.running = True
-    self.queue = Queue()
-    self.commands = Queue()
+    # We'll use a worker thread to manage the device as we need to keep getting
+    # data from it fairly often. The worker will report measures through self as
+    # it's an EventRouter. We need another EventRouter to send commands to it.
+    self.commands = EventRouter()
 
-    def worker_run():
+    self.commands.observe("reset", self._setup)
+    self.commands.observe("sensors_range", self._set_sensors_range)
+    self.commands.observe("stop", self._stop_worker)
+
+    # And we'll start by ensuring it resets.
+    self.commands.trigger("reset")
+
+    self.worker = Thread(target=self._worker)
+    self.worker.start()
+
+  def _worker(self):
+    """Run the commands tick and measures in a loop."""
+    exception_count = 0
+    while exception_count < 1:
       try:
-        # Setup the little guy.
-        self._setup()
-
-        # Enter the loop
-        while self.running:
-
-          measure = None # TODO
-
-          self.queue.put(("measure", measure))
-
-          # TODO: check commands (and run em)
-
+        self.commands.tick()
+        self._get_measures()
+      except Gyro.StopWorker:
+        break
       except Exception as e:
-        self.queue.put(("exception", e))
+        self.trigger(("exception", e))
+        exception_count += 1
+      else:
+        exception_count = 0
 
-    self.worker = Thread(target=worker_run)
+      sleep(0.5 / self.sample_rate)
 
+  def _stop_worker(self):
+    raise Gyro.StopWorker
 
   def _setup(self):
     # Check
@@ -165,8 +199,8 @@ class Gyro:
     self.bus.write_byte_data(self.address, Gyro.CONFIG, 0b001)
 
 
-    # Enable FIFO
-    # -----------
+    # Allow interrupts
+    # ----------------
 
     # Allow interrupts from data ready and FIFO overflow. We need to know if it
     # overflowed since the data won't be alligned anymore and oops.
@@ -174,29 +208,49 @@ class Gyro:
     # Read it once to make sure it's clear.
     self.bus.read_byte_data(self.address, Gyro.INT_STATUS)
 
+    # Set sensor options
+    #-------------------
+
+    self._set_sensors_range(0, read_fifo=False)
+
+    # TODO: do the test sequence thingy
+
+    # Enable FIFO
+    # -----------
 
     # Enable the FIFO storage for gyro x, y, z and accel x, y, z measurements.
     self.bus.write_byte_data(self.address, Gyro.FIFO_EN, 0b01111000)
     # Enable FIFO.
     self.bus.write_byte_data(self.address, Gyro.USER_CTRL, 0b01000000)
 
-    # Finalize sensors and start
-    #---------------------------
-
-    self._set_sensors_range(0)
+    # Start
+    # -----
 
     # Turn off sleep mode and switch the clock to gyro x (says in the manual
     # it's better than internal clock.)
     self.bus.write_byte_data(self.address, Gyro.PWR_MGMT_1, 0b00000001)
 
-    # TODO: do the test sequence thingy
+    time = monotonic()
 
-  def _set_sensors_range(self, sensors_range):
-    assert sensors_range in (0, 1, 2, 3)
-    # TODO: disable FIFO_EN for the sensors.
+    self.trigger("start", time)
 
-    # Get all measures so we don't waste anything.
-    self._get_measures()
+
+  def _get_instant_measures(self):
+    raise NotImplementedError
+    # To read data we should:
+    #     0. Use DATA_RDY_EN to enable interrupts on data.
+    #     1. Read INT_STATUS and check DATA_RDY_INT is set.
+    #     2. Read all values from sensor registers as fast as possible (in Python...).
+    #     3. Read INT_STATUS and check DATA_RDY_INT was not set, otherwise we read half fucked data, so retry reading.
+
+  def _disable_fifo(self):
+    self.bus.write_byte_data
+
+  def _set_sensors_range(self, sensors_range, read_fifo=True):
+    assert type(sensors_range) is int and sensors_range in (0, 1, 2, 3)
+    if read_fifo:
+      # Get all measures so we don't waste anything.
+      self._get_measures()
 
     # Set the range of the gyro and accelerometer.
     self.bus.write_byte_data(self.address, Gyro.GYRO_CONFIG, sensors_range << 3)
@@ -204,61 +258,86 @@ class Gyro:
     # Use the new range from now.
     self.sensors_range = sensors_range
 
-    # TODO: reset fifo and re-enable FIFO_EN
+    if read_fifo:
+      self._reset_fifo()
 
+  def _reset_fifo(self):
+    # Disable FIFO_EN.
+    self.bus.write_byte_data(self.address, Gyro.USER_CTRL, 0b00000000)
+
+    # Trigger FIFO_RESET.
+    self.bus.write_byte_data(self.address, Gyro.USER_CTRL, 0b00000100)
+    for _ in range(100):
+      if self.bus.read_byte_data(self.address, Gyro.USER_CTRL) & 0b00000100 == 0:
+        # The reset bit was clearer, we're good.
+        break
+      # I think FIFO resetting should be fast, do the minimal sleep.
+      sleep(0.0)
+
+    # Re-enable FIFO_EN.
+    self.bus.write_byte_data(self.address, Gyro.USER_CTRL, 0b01000000)
+
+    self.trigger("discarded")
+
+  def _read_uint16(self, reg_hi, reg_lo):
+    return ((self.bus.read_byte_data(self.address, reg_hi) << 8) +
+             self.bus.read_byte_data(self.address, reg_lo))
+
+  def _read_int16(self, reg_hi, reg_lo):
+    return to_signed_int16(self._read_uint16(reg_hi, reg_lo))
+
+  def _emit_measure(self, time, ax, ay, az, gx, gy, gz):
+    accel_scale = Gyro.accel_g_range[self.sensors_range] * Gyro.g
+    gyro_scale = Gyro.gyro_deg_range[self.sensors_range] * Gyro.rad
+
+    self.trigger("measure", Gyro.Measure(
+      time=time,
+      duration=1.0 / self.sample_rate,
+      acceleration=(accel_scale * ax, accel_scale * ay, accel_scale * az),
+      rotation=(gyro_scale * gx, gyro_scale * gy, gyro_scale * gz)
+    ))
 
   def _get_measures(self):
     # FIFO max size is 1024 bytes. Which at 0.5 kHz sample rate and using 6
     # measures of 2 bytes each, means we have to 170ms worth of memory.
 
-    # TODO:
     # To read FIFO probably simplest way would be to read FIFO_COUNT make sure
     # it's >= 12, then read 12 bytes at a time, then double check FIFO_OFLOW_INT
     # wasn't set. If it was, then use FIFO_RESET to discard partial data.
     # Otherwise, if all good, parse the 6 sensor measures and push to queue.
     # Then keep going while still something in the FIFO.
+    fifo_count = self._read_uint16(Gyro.FIFO_COUNTH, Gyro.FIFO_COUNTL)
+
+    # Read bundles of the 6, 2 byte measurements.
+    for _ in range(fifo_count // 12):
+      time = monotonic()
+
+      ax, ay, az, gx, gy, gz = (self._read_int16(Gyro.FIFO_R_W, Gyro.FIFO_R_W) for _ in range(6))
+
+      # Check that the FIFO hasn't overflowed (FIFO_OFLOW_INT is 0).
+      if self.bus.read_byte_data(self.address, Gyro.INT_STATUS) & 0b00010000:
+        self._reset_fifo()
+        return
+
+      # FIFO is good.
+      self._emit_measure(time, ax, ay, az, gx, gy, gz)
 
 
-    #     3. Read INT_STATUS and check FIFO_OFLOW_INT was not set, otherwise reset the FIFO with FIFO_RESET, signal the user, and resume.
-    #     4. Read FIFO_COUNT, then read as many bytes from FIFO_R_W.
+  def _self_test(self):
+    raise NotImplementedError
 
-    pass
-    # TODO: dump the FIFO into the queue
-
-
-  def measure(self):
-    try:
-      what, item =  self.queue.get_nowait()
-    except Empty:
-      return None
-
-    if what == "measure":
-      return item
-
-    elif what == "exception":
-      raise ValueError("Error while reading gyro!") from item
-
-    else:
-      raise ValueError("Unknown object in queue: {}".format(what))
-
-  def __aiter__(self):
-    return self
-
-  async def __anext__(self):
-    while self.running:
-      m = self.measure()
-      if m is None:
-        asyncio.sleep(0.5 / self.sample_rate)
-      else:
-        return m
-    else:
-      raise StopAsyncIteration
+    # TODO: pump test results into self.trigger("test_results")
 
   def __del__(self):
     # Tell the worker thread to stop.
-    self.running = False
+    self.commands.trigger("stop")
 
     # Let it finish.
     self.worker.join()
 
     self.bus.close()
+
+
+
+def to_signed_int16(uint16):
+  return uint16 if (uint16 >= 0x8000) else -((0xFFFF - uint16) + 1)
