@@ -7,8 +7,31 @@ if __name__ == "__main__":
 
   gyro = Gyro()
 
-  gyro.observe_any(lambda event, args, kwargs: print(event, args))
+  gyro.observe("start", lambda time: print("Started at: ", time))
 
-  while True:
-    gyro.tick()
-    sleep(0.05)
+  class Last:
+    def __init__(self):
+      self.last = None
+    def __call__(self, item):
+      self.last = item
+
+  measure = Last()
+
+  gyro.observe("measure", measure)
+
+  gyro.observe("exception", lambda exception: print("Exception:", exception))
+
+  gyro.observe("discarded", lambda: print("Items discarded from FIFO!"))
+
+  try:
+    while True:
+      gyro.tick()
+
+      if measure.last:
+        print("ax: {:.2f}".format(measure.last.acceleration[0]))
+      else:
+        print("No measures!")
+
+      sleep(0.2)
+  except KeyboardInterrupt:
+    pass
