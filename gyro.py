@@ -104,7 +104,7 @@ class Gyro(EventRouter):
     Events:
       measure: Receives the latest Gyro.Measure from the gyro.
       exception: Exception that occured while reading the gyro.
-      test_results: Test results from a gyro self test.
+      test_result: Test results from a gyro self test.
       start: Time when the sensor starts (or restarts after reset).
       discarded: Some measures were discared, because sensor overflow or range change.
 
@@ -154,7 +154,7 @@ class Gyro(EventRouter):
       except Gyro.StopWorker:
         break
       except Exception as e:
-        self.trigger(("exception", e))
+        self.trigger("exception", e)
         exception_count += 1
       else:
         exception_count = 0
@@ -174,11 +174,16 @@ class Gyro(EventRouter):
     # Reset the device to all 0s and wait for confirmation.
     # After a reset, all registers should be 0 except SLEEP and WHO_AM_I.
     self.bus.write_byte_data(self.address, Gyro.PWR_MGMT_1, 0b10000000)
-    for _ in range(100):
+    # Wait for the device to reset. It only mentions to wait for 100ms
+    # for the SPI interface but seems like it's true for both.
+    sleep(0.1)
+    for _ in range(10):
       if self.bus.read_byte_data(self.address, Gyro.PWR_MGMT_1) & 0b10000000 == 0:
         # The reset bit was clearer, we're good.
         break
-      sleep(0.01)
+      else:
+        # Try again in a bit.
+        sleep(0.1)
     else:
       raise Gyro.Malfunction("Gyro didn't reset within a second!")
 
@@ -188,7 +193,6 @@ class Gyro(EventRouter):
     # Turn off sleep mode and switch the clock to gyro x (says in the manual
     # it's better than internal clock.)
     self.bus.write_byte_data(self.address, Gyro.PWR_MGMT_1, 0b00000001)
-
 
     # Set rate
     # --------
@@ -238,10 +242,11 @@ class Gyro(EventRouter):
     # Enable FIFO.
     self.bus.write_byte_data(self.address, Gyro.USER_CTRL, 0b01000000)
 
+    # Start
+    # -----
 
-    time = monotonic()
-
-    self.trigger("start", time)
+    # End the starting sequence and mention the start time.
+    self.trigger("start", monotonic())
 
   def _get_instant_measures(self, wait_until_ready=True):
     # To read data we should:
@@ -249,8 +254,7 @@ class Gyro(EventRouter):
     #     1. Read INT_STATUS and check DATA_RDY_INT is set.
     #     2. Read all values from sensor registers in a signle block.
 
-    for _ in range(100):
-
+    for _ in range(10):
       time = monotonic()
 
       # Read all measures at once (it's faster to read status in the same block):
@@ -263,7 +267,7 @@ class Gyro(EventRouter):
 
       # Check if data was ready, if not try again very soon.
       if wait_until_ready and (not data[0] & 0b00000001):
-        sleep(0.1 / self.sample_rate)
+        sleep(0.2 / self.sample_rate)
         continue
 
       ax = make_float16(data[1:3])
@@ -278,7 +282,7 @@ class Gyro(EventRouter):
 
       break
     else:
-      raise Gyro.Malfunction("Gyro didn't have measurements for 10 times its sample rate.")
+      raise Gyro.Malfunction("Gyro didn't have measurements for 2 times its sample rate.")
 
 
   def _disable_fifo(self):
@@ -375,7 +379,7 @@ class Gyro(EventRouter):
   def _self_test(self):
     raise NotImplementedError
 
-    # TODO: pump test results into self.trigger("test_results")
+    # TODO: pump test results into self.trigger("test_result")
 
   def __del__(self):
     # Tell the worker thread to stop.

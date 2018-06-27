@@ -12,8 +12,17 @@ if __name__ == "__main__":
   class Last:
     def __init__(self):
       self.last = None
+      self.count = 0
+
     def __call__(self, item):
       self.last = item
+      self.count += 1
+
+    @property
+    def count_since_last(self):
+      tmp_count = self.count
+      self.count = 0
+      return tmp_count
 
   measure = Last()
 
@@ -28,10 +37,10 @@ if __name__ == "__main__":
       gyro.tick()
 
       if measure.last:
-        print("ax: {:.2f}".format(measure.last.acceleration[0]))
+        print("ax: {:6.2f}; nr since last read: {}".format(measure.last.acceleration[0], measure.count_since_last))
       else:
         print("No measures!")
 
-      sleep(0.2)
+      sleep(0.1)
   except KeyboardInterrupt:
     pass
