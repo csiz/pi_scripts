@@ -18,12 +18,14 @@ from time import sleep, monotonic
 import asyncio
 from math import pi
 
-from oberserver import EventRouter
+from observer import Observable, Dispatcher, create_observable
 
-class Gyro(EventRouter):
+class Gyro(Observable):
   """Control the MPU-6050 Gyroscope and Accelerometer (on top of the GY-521 breakout board).
 
   See manual at https://www.invensense.com/wp-content/uploads/2015/02/MPU-6000-Register-Map1.pdf
+
+  Listen to events with `Gyro.on` and issue commands with `Gyro.command`.
 
   Events:
     measure: Receives the latest Gyro.Measure from the gyro.
@@ -173,20 +175,25 @@ class Gyro(EventRouter):
     self.sensors_range = None
 
     # We'll use a worker thread to manage the device as we need to keep getting
-    # data from it fairly often. The worker will report measures through self as
-    # it's an EventRouter. We need another EventRouter to send commands to it.
-    super().__init__(maxsize=2048)
-    self.commands = EventRouter()
+    # data from it fairly often. The thread will `_dispatch` measures to ourselves,
+    # as an `Observable`; and we'll assigns `tasks` to the worker via `command`.
 
-    self.commands.observe("setup", self._setup)
-    self.commands.observe("reset", self._reset)
-    self.commands.observe("sensors_range", self._set_sensors_range)
-    self.commands.observe("stop", self._stop_worker)
+    self._dispatch = Dispatcher(maxsize=2048)
+    super().__init__(self._dispatch)
+
+    # Note that `tasks` is not attached to `self` as we should only execute them
+    # from the worker thread. This should prevent any conflicts with the worker.
+    tasks, self.command = create_observable()
+
+    tasks.on("setup", self._setup)
+    tasks.on("reset", self._reset)
+    tasks.on("sensors_range", self._set_sensors_range)
+    tasks.on("stop", self._stop_worker)
 
     # And we'll start by ensuring it sets itself up (in the background thread).
-    self.commands.trigger("setup")
+    self.command("setup")
 
-    self.worker = Thread(target=self._worker_loop)
+    self.worker = Thread(target=self._worker_loop, args=(tasks,))
     self.worker.daemon = True
     self.worker.start()
 
@@ -273,7 +280,7 @@ class Gyro(EventRouter):
     # -----
 
     # End the starting sequence and mention the start time.
-    self.trigger("start", monotonic())
+    self._dispatch("start", monotonic())
 
   def _get_instant_measures(self, wait_until_ready=True):
     """Get instant sensor measure, ignoring internal memory.
@@ -372,7 +379,7 @@ class Gyro(EventRouter):
         rotation=(gyro_scale * gx, gyro_scale * gy, gyro_scale * gz),
     )
 
-    self.trigger("measure", measure)
+    self._dispatch("measure", measure)
 
 
   def _set_sensors_range(self, sensors_range, read_fifo=True):
@@ -434,28 +441,28 @@ class Gyro(EventRouter):
     # Re-enable FIFO_EN.
     self.bus.write_byte_data(self.address, Gyro.USER_CTRL, Gyro.FIFO_EN_BIT)
 
-    self.trigger("discarded")
+    self._dispatch("discarded")
 
 
   def _self_test(self):
     """Run the internal test procedure for the gyro and report results."""
     raise NotImplementedError
 
-    # TODO: pump test results into self.trigger("test_result")
+    # TODO: pump test results into self._dispatch("test_result")
 
 
-  def _worker_loop(self):
+  def _worker_loop(self, tasks):
     """Run the commands tick and measures in a loop."""
 
     exception_count = 0
     while exception_count < 1:
       try:
-        self.commands.tick()
+        tasks.tick()
         self._get_measures()
       except Gyro.StopWorker:
         break
       except Exception as e:
-        self.trigger("exception", e)
+        self._dispatch("exception", e)
         exception_count += 1
       else:
         exception_count = 0
@@ -471,12 +478,13 @@ class Gyro(EventRouter):
     """Reset the sensor and close the connection."""
 
     # Stop the worker.
-    self.commands.trigger("stop")
+    self.command("stop")
 
     # Let it finish.
     self.worker.join()
 
     self.bus.close()
+
 
   def __enter__(self):
     return self
@@ -508,18 +516,18 @@ if __name__ == "__main__":
 
   with Gyro() as gyro:
 
-    gyro.observe("start", lambda time: print("Started at: ", time))
+    gyro.on("start", lambda time: print("Started at: ", time))
 
     @throttled(wait=0.1)
     def print_acceleration(measure):
       print("ax: {:6.2f}, ay: {:6.2f}, az: {:6.2f}".format(
           *measure.acceleration))
 
-    gyro.observe("measure", print_acceleration)
+    gyro.on("measure", print_acceleration)
 
-    gyro.observe("exception", lambda exception: print("Exception:", exception))
+    gyro.on("exception", lambda exception: print("Exception:", exception))
 
-    gyro.observe("discarded", lambda: print("Items discarded from FIFO!"))
+    gyro.on("discarded", lambda: print("Items discarded from FIFO!"))
 
     while True:
       gyro.tick()
