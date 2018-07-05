@@ -130,6 +130,7 @@ class Gyro(Observable):
   @dataclass
   class Measure:
     """Return struct for gyroscope measures."""
+    count: int
     time: float
     duration: float
     acceleration: Tuple[float, float, float]
@@ -165,6 +166,9 @@ class Gyro(Observable):
 
     # Measurement range index (for both acceleration and gyro).
     self.sensors_range = None
+
+    # Keep track of how many measures we got from the sensor.
+    self.count = 0
 
     # We'll use a worker thread to manage the device as we need to keep getting
     # data from it fairly often. The thread will `_dispatch` measures to ourselves,
@@ -307,7 +311,7 @@ class Gyro(Observable):
       gy = make_float16(data[11:13])
       gz = make_float16(data[13:15])
 
-      self._emit_measure(time, ax, ay, az, gx, gy, gz)
+      self._emit_measure(time, 1.0 / self.sample_rate, ax, ay, az, gx, gy, gz)
 
       break
     else:
@@ -331,16 +335,18 @@ class Gyro(Observable):
     # Read packs of the 6, 2 byte measurements.
     packs_in_fifo = fifo_count // 12
 
+    duration = 1.0 / self.sample_rate
+
+    # At this time the measures were already taken and available for reading.
+    time = monotonic()
+
     while packs_in_fifo > 0:
       # The block read can only do 32 bytes at a time, limit to 2 packs of
       # measurements (maximum of 24 bytes at a time).
       packs_to_read = min(2, packs_in_fifo)
 
-      time = monotonic()
-
       # Read as much at once to minize syscalls.
       data = self.bus.read_i2c_block_data(self.address, Gyro.FIFO_R_W, packs_to_read * 12)
-      packs_in_fifo -= packs_to_read
 
       # Check that the FIFO hasn't overflowed (FIFO_OFLOW_INT is 0).
       if self.bus.read_byte_data(self.address, Gyro.INT_STATUS) & Gyro.FIFO_OFLOW_INT:
@@ -356,19 +362,29 @@ class Gyro(Observable):
         gy = make_float16(data[12*i +  8 : 12*i + 10])
         gz = make_float16(data[12*i + 10 : 12*i + 12])
 
-        self._emit_measure(time, ax, ay, az, gx, gy, gz)
+        # If we have more measures in fifo, then we need adjust the time each
+        # measure was actually take by how fast the gyro samples its sensors.
+        pack_time = time - duration * (packs_in_fifo - i - 1)
 
+        self._emit_measure(pack_time, duration, ax, ay, az, gx, gy, gz)
 
-  def _emit_measure(self, time, ax, ay, az, gx, gy, gz):
+      # Compute how many packs are remaining to be processed.
+      packs_in_fifo -= packs_to_read
+
+  def _emit_measure(self, time, duration, ax, ay, az, gx, gy, gz):
     """Scale the sensor values to SI units and emit the measure event."""
     accel_scale = Gyro.accel_g_range[self.sensors_range] * Gyro.g
     gyro_scale = Gyro.gyro_deg_range[self.sensors_range] * Gyro.rad
 
+    # Increment the total measures count.
+    self.count += 1
+
     measure = Gyro.Measure(
-        time=time,
-        duration=1.0 / self.sample_rate,
-        acceleration=(accel_scale * ax, accel_scale * ay, accel_scale * az),
-        rotation=(gyro_scale * gx, gyro_scale * gy, gyro_scale * gz),
+      count=self.count,
+      time=time,
+      duration=duration,
+      acceleration=(accel_scale * ax, accel_scale * ay, accel_scale * az),
+      rotation=(gyro_scale * gx, gyro_scale * gy, gyro_scale * gz),
     )
 
     self._dispatch("measure", measure)
