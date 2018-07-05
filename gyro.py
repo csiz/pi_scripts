@@ -12,11 +12,13 @@ A German guy does (https://tutorials-raspberrypi.com/measuring-rotation-and-acce
 `SMBUS(1)` stands for revision 1.
 """
 
-from smbus import SMBus # pylint: disable=import-error
+
+from smbus2 import SMBus
 from threading import Thread
 from time import sleep, monotonic
-import asyncio
 from math import pi
+from dataclasses import dataclass
+from typing import Tuple
 
 from observer import Observable, Dispatcher, create_observable
 
@@ -82,31 +84,31 @@ class Gyro(Observable):
   # -------------
 
   # PWR_MGMT_1
-  SLEEP = 0b01000000
-  DEVICE_RESET = 0b10000000
-  CLKSEL_GYRO_X = 0b001
+  SLEEP = 0b_0100_0000
+  DEVICE_RESET = 0b_1000_0000
+  CLKSEL_GYRO_X = 0b_001
 
   # CONFIG
-  DLPF_CFG_188Hz = 0b001
+  DLPF_CFG_188Hz = 0b_001
 
   # INT_ENABLE
-  FIFO_OFLOW_EN = 0b00010000
-  DATA_RDY_EN = 0b00000001
+  FIFO_OFLOW_EN = 0b_0001_0000
+  DATA_RDY_EN = 0b_0000_0001
 
   # INT_STATUS
-  FIFO_OFLOW_INT = 0b00010000
-  DATA_RDY_INT = 0b00000001
+  FIFO_OFLOW_INT = 0b_0001_0000
+  DATA_RDY_INT = 0b_0000_0001
 
   # USER_CTRL
-  FIFO_EN_BIT = 0b01000000
-  FIFO_RESET = 0b00000100
+  FIFO_EN_BIT = 0b_0100_0000
+  FIFO_RESET = 0b_0000_0100
 
   # FIFO_EN
-  TEMP_FIFO_EN  = 0b10000000
-  XG_FIFO_EN    = 0b01000000
-  YG_FIFO_EN    = 0b00100000
-  ZG_FIFO_EN    = 0b00010000
-  ACCEL_FIFO_EN = 0b00001000
+  TEMP_FIFO_EN  = 0b_1000_0000
+  XG_FIFO_EN    = 0b_0100_0000
+  YG_FIFO_EN    = 0b_0010_0000
+  ZG_FIFO_EN    = 0b_0001_0000
+  ACCEL_FIFO_EN = 0b_0000_1000
 
 
   # Standard Units Ratios
@@ -125,23 +127,13 @@ class Gyro(Observable):
   gyro_deg_range = [250, 500, 1000, 2000]
 
 
+  @dataclass
   class Measure:
     """Return struct for gyroscope measures."""
-    __slots__ = ("time", "duration", "acceleration", "rotation")
-
-    def __init__(self, time, duration, acceleration, rotation):
-      self.time = time
-      self.duration = duration
-      self.acceleration = acceleration
-      self.rotation = rotation
-
-    def __repr__(self):
-      return "Gyro.Measure(time={}, duration={}, acceleration={}, rotation={})".format(
-        self.time,
-        self.duration,
-        self.acceleration,
-        self.rotation,
-      )
+    time: float
+    duration: float
+    acceleration: Tuple[float, float, float]
+    rotation: Tuple[float, float, float]
 
 
   class StopWorker(Exception):
