@@ -1,0 +1,139 @@
+automationhat - some hat software
+
+blinker + event dispatching thing
+
+blinkt - very bright row of leds
+
+buttonshim - err no details
+
+Cap1xxx - Python library for Microchip Capacitive Touch devices in the Cap1xxx family
+
+chardet + universal encoding detector
+
+click - command line like argparse
+
+colorama + colored terminal text
+
+cryptography +
+
+drumhat - hat with some touchy touchy
+
+envirophat - sensor hat
+
+ExplorerHAT + nifty breadboard hat
+
+Flask +
+
+fourletterphat - guessing 4 letter display hat
+
+gpiozero + better gpio for pi
+
+idna + Internationalized Domain Names in Applications (IDNA)
+
+itsdangerous + Various helpers to pass trusted data to untrusted environments and back.
+
+jedi + An autocompletion tool for Python that can be used for text editors.
+
+Jinja2 +
+
+keyring +
+
+keyrings.alt +
+
+MarkupSafe + Implements a XML/HTML/XHTML Markup safe string for Python
+
+mcpi - minecraft pi
+
+microdotphat - led display
+
+mote - more leds
+
+motephat - same as above
+
+numpy +
+
+oauthlib +
+
+pantilthat + nifty gizmo for mounting cameras
+
+pgzero - 2d game framework
+
+phatbeat - sound hat
+
+pianohat - meh
+
+picamera +
+
+picraft - more minecraft
+
+piglow - weird leds
+
+pigpio + gpio
+
+Pillow + imaging lib
+
+pyasn1 + ip something
+
+pycrypto +
+
+pygame - sdl game dev, pass
+
+pygobject + PyGObject is a Python package which provides bindings for GObject based libraries such as GTK+, GStreamer, WebKitGTK+, GLib, GIO and many more.
+
+pyinotify + Linux filesystem events monitoring
+
+PyJWT + JSON Web Token implementation in Python
+
+pyOpenSSL + again?
+
+pyserial + Python Serial Port Extension
+
+python-apt - Python bindings for libapt.
+
+pyxdg + PyXDG contains implementations of freedesktop.org standards in python.
+
+rainbowhat - everyone really really likes leds
+
+requests +
+
+requests-oauthlib +
+
+RPi.GPIO +
+
+RTIMULib ? a versatile C++ and Python 9-dof, 10-dof and 11-dof IMU library
+
+scrollphat - sooooo many leds
+
+scrollphathd -
+
+SecretStorage + Python bindings to FreeDesktop.org Secret Service API
+
+sense-emu +
+
+sense-hat +
+
+simplejson +
+
+six +
+
+skywriter + dope hat! detects fingers floating on top
+
+sn3218 + even more leds, but seems useful
+
+spidev + Python bindings for Linux SPI access through spidev
+
+thonny - Python IDE for beginners
+
+touchphat + buttons
+
+twython + twitter python stuff, they say actively maintained
+
+unicornhathd - lots of leds
+
+urllib3 + HTTP library with thread-safe connection pooling, file post, and more.
+
+Werkzeug + The comprehensive WSGI web application library.
+
+
+
+

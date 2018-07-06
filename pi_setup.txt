@@ -1,0 +1,81 @@
+# Basic Setup (Python 3.5)
+# ------------------------
+
+* Flashed Raspibian to SD card
+* Booted and connected to WiFi
+* Enabled SSH from Raspberry Configuration
+* Set date and time
+* Reserved local IP address for the Pi in my router
+* Added public key to .ssh/authorized_keys
+* Disabled login by password in /etc/ssh/sshd_config
+
+    # My Settings
+    #############
+
+    AuthenticationMethods publickey
+    PasswordAuthentication no
+    ChallengeResponseAuthentication no
+    KbdInteractiveAuthentication no
+    PermitRootLogin forced-commands-only
+
+* Enable I2C interface:
+  + Run `sudo raspi-config` then under "5 Interfacing Options" enable "P5 I2C"
+  + Make sure `i2c-bcm2708` and `i2c-dev` are included in `/etc/modules` (can use `sudo nano` editor).
+  + Install drivers `sudo apt-get install i2c-tools python-smbus`.
+
+
+* Command to copy a file via SSH (using Putty):
+
+    pscp -l pi -i <rsa-key.ppk> <local-file> <remote-IP>:<remote-file>
+
+
+
+Compiling Python 3.7 and Libs
+-----------------------------
+
+### Install prerequisites:
+
+    sudo apt-get update
+    sudo apt install libffi-dev libbz2-dev liblzma-dev libsqlite3-dev libncurses5-dev libgdbm-dev zlib1g-dev libreadline-dev libssl-dev tk-dev build-essential libncursesw5-dev libc6-dev openssl git
+
+### Install Python
+
+    wget https://www.python.org/ftp/python/3.7.0/Python-3.7.0.tgz
+
+    tar -zxvf Python-3.7.0.tgz
+    cd Python-3.7.0/
+    ./configure --enable-optimizations
+    # Don't use more than 2 CPUs, might be running out of RAM while making.
+    make -j2
+
+### Install libs
+
+Verify it works.
+
+    sudo pip3.7 install six
+    sudo pip3.7 install numpy
+
+Some dependencies have funky requirements, we can figure them out with `apt-file`; neat!
+See https://raspberrypi.stackexchange.com/questions/66418/unable-to-run-sdl-config)
+
+
+Install all the libs; see `preinstalled-libs.txt` and `requirements.txt` for details.
+
+    # THe below is needed for `pygame`, but I'm skipping that one.
+    # sudo apt install apt-file
+    # sudo apt update
+    # apt-file search "sdl-config"
+    # sudo apt install libsdl1.2-dev
+
+    # Needed for `Pillow`
+    sudo apt-get install libjpeg-dev zlib1g-dev
+
+    # Needed for `pycairo` for `pygobject`.
+    sudo apt install libcairo2-dev libgirepository1.0-dev
+
+    sudo pip3.7 install blinker chardet colorama cryptography ExplorerHAT Flask gpiozero idna itsdangerous jedi Jinja2 keyring keyrings.alt MarkupSafe numpy oauthlib pantilthat picamera pigpio Pillow pyasn1 pycrypto pygobject pyinotify PyJWT pyOpenSSL pyserial pyxdg requests requests-oauthlib RPi.GPIO SecretStorage sense-emu sense-hat simplejson six skywriter sn3218 spidev touchphat twython urllib3 Werkzeug
+
+    # Crap, forgot smbus doesn't come for free. Use this Python based
+    # implementation, seems to be the best supported.
+    sudo pip3.7 install smbus2
+
