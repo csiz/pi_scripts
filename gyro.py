@@ -193,7 +193,7 @@ class Gyro(Observable):
     self.worker.daemon = True
     self.worker.start()
 
-  def _setup(self):
+  def _setup(self, *_):
     """Setup the gyroscope.
 
     Take control of the sensor, reset it to known state, then configure it:
@@ -410,7 +410,7 @@ class Gyro(Observable):
       self._reset_fifo()
 
 
-  def _reset(self):
+  def _reset(self, *_):
     """Reset the device to initial state."""
 
     # Reset the device to all 0s and wait for confirmation.
@@ -480,7 +480,7 @@ class Gyro(Observable):
     self._reset()
 
 
-  def _stop_worker(self):
+  def _stop_worker(self, *_):
     raise Gyro.StopWorker
 
 
@@ -537,7 +537,7 @@ if __name__ == "__main__":
 
     gyro.on("exception", lambda exception: print("Exception:", exception))
 
-    gyro.on("discarded", lambda: print("Items discarded from FIFO!"))
+    gyro.on("discarded", lambda _: print("Items discarded from FIFO!"))
 
     while True:
       gyro.tick()

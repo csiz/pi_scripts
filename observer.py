@@ -11,10 +11,10 @@ class Dispatcher:
     """Dispatch up to `maxsize` events, events that are not observed in time are dropped."""
     self.queue = Queue(maxsize=maxsize)
 
-  def trigger(self, event, *args, **kwargs):
-    """Trigger the event with parameters."""
+  def trigger(self, event, data=None):
+    """Trigger the `event` with `data`."""
     try:
-      self.queue.put_nowait((event, args, kwargs))
+      self.queue.put_nowait((event, data))
 
     # If it was full, discard the top of the queue and try again.
     except Full:
@@ -23,7 +23,7 @@ class Dispatcher:
       except Empty:
         pass
       # If it's still full this time, something's weird.
-      self.queue.put_nowait((event, args, kwargs))
+      self.queue.put_nowait((event, data))
 
   __call__ = trigger
 
@@ -41,17 +41,17 @@ class Observable:
   def __try_to_observe_event(self):
     """Try to get 1 event from the queue and pass it to observers."""
     try:
-      event, args, kwargs = self.__queue.get_nowait()
+      event, data = self.__queue.get_nowait()
     except Empty:
       return None
 
     for observer in self.__observers.get(event, []):
-      observer(*args, **kwargs)
+      observer(data)
 
     for any_observer in self.__any_observers:
-      any_observer(event, args, kwargs)
+      any_observer(event, data)
 
-    return (event, args, kwargs)
+    return (event, data)
 
 
   def tick(self):
@@ -61,12 +61,12 @@ class Observable:
 
 
   def on(self, event, callback):
-    """Add callback to be triggered on the event."""
+    """Add callback to be triggered on the `event`. Invoked witha single parameter: `data`."""
     self.__observers.setdefault(event, []).append(callback)
 
 
   def on_any(self, callback):
-    """Add callback to be triggered on any event. Invoked with 3 parameters: event, args, kwargs."""
+    """Add callback to be triggered on any event. Invoked with 2 parameters: event, data."""
     self.__any_observers.append(callback)
 
 
