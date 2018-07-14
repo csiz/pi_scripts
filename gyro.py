@@ -20,7 +20,7 @@ from math import pi
 from dataclasses import dataclass
 from typing import Tuple
 
-from observer import Observable, Dispatcher, create_observable
+from . observer import Observable, Dispatcher, create_observable
 
 class Gyro(Observable):
   """Control the MPU-6050 Gyroscope and Accelerometer (on top of the GY-521 breakout board).
@@ -391,7 +391,9 @@ class Gyro(Observable):
 
 
   def _set_sensors_range(self, sensors_range, read_fifo=True):
-    assert type(sensors_range) is int and sensors_range in (0, 1, 2, 3)
+    if type(sensors_range) is not int or sensors_range not in (0, 1, 2, 3):
+      raise ValueError("Sensor range must be an integer within [0, 3].")
+
     if read_fifo:
       # Get all measures so we don't waste anything.
       self._get_measures()
@@ -520,7 +522,7 @@ def make_float16(high_low_bytes):
 # Continuously print gyro acceleration.
 
 if __name__ == "__main__":
-  from utils import throttled
+  from . utils import throttled
 
   with Gyro() as gyro:
 

@@ -79,3 +79,6 @@ Install all the libs; see `preinstalled-libs.txt` and `requirements.txt` for det
     # implementation, seems to be the best supported.
     sudo pip3.7 install smbus2
 
+    # Also websockets.
+    sudo pip3.7 install websockets
+
