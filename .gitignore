@@ -1,3 +1,4 @@
 .sync/
 .vscode/
 software/
+**/__pycache__

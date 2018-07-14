@@ -70,17 +70,12 @@ class Observable:
     self.__any_observers.append(callback)
 
 
-  def __aiter__(self):
-    return self
-
-  async def __anext__(self):
-    # Iterate asynchornously over events. Would be nicer with async def generators,
-    # but they're not available in Python 3.5.3 that's on the Pi. Anyways, loop
-    # until an event shows up, and return it. Also let other stuff run with `sleep(0)`.
+  async def __aiter__(self):
+    """ Iterate asynchornously over all events."""
     while True:
       event_tuple = self.__try_to_observe_event()
       if event_tuple is not None:
-        return event_tuple
+        yield event_tuple
       else:
         await asyncio.sleep(0.0)
 
