@@ -82,3 +82,8 @@ Install all the libs; see `preinstalled-libs.txt` and `requirements.txt` for det
     # Also websockets.
     sudo pip3.7 install websockets
 
+    # Need the asyncio version.
+    # sudo pip3.7 install smbus2_asyncio
+
+    # Fixed version...
+    sudo pip3.7 install git+https://github.com/csiz/smbus2_asyncio@master
