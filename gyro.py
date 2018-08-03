@@ -14,7 +14,7 @@ A German guy does (https://tutorials-raspberrypi.com/measuring-rotation-and-acce
 
 from time import monotonic
 from asyncio import sleep
-from math import pi
+from math import pi, floor
 from dataclasses import dataclass
 from typing import Tuple
 import logging
@@ -159,9 +159,6 @@ class Gyro:
     # How often the gyro samples its sensors and makes them available.
     self.sample_rate = None
 
-    # The sample_rate will be set to `1000Hz / sample_rate_div`.
-    self.sample_rate_div = 4
-
     # Measurement range index (for both acceleration and gyro).
     self.sensors_range = None
 
@@ -178,8 +175,11 @@ class Gyro:
   async def _read_block(self, ptr, size):
     return await self._bus.read_i2c_block_data(self.address, ptr, size)
 
-  async def setup(self):
+  async def setup(self, sample_rate=250):
     """Setup the gyroscope.
+
+    Args:
+      sample_rate: Internal gyro sampling rate, in Hz.
 
     Take control of the sensor, reset it to known state, then configure it:
       1. Check that it's connected and reset to initial state.
@@ -220,13 +220,17 @@ class Gyro:
     # > the same accelerometer sample may be output to the FIFO, DMP, and sensor registers more than
     # > once.
 
-    # Aim for the below sampling rate (Hz)
-    self.sample_rate = 1000.0 / self.sample_rate_div
+    # The sample_rate will be set to `1000Hz / sample_rate_div`, find the nearest integer div
+    # number that brings us to at least the desired sample rate.
+    sample_rate_div = int(floor(1000 / sample_rate))
+
+    # Actual sampling rate that will be used (Hz).
+    self.sample_rate = 1000 / sample_rate_div
 
     # Lower the `sample rate = gyro rate / (1 + SMPLRT_DIV)` since it's much
     # faster than the gyro bandwith (1kHz vs 256Hz). The bandwith is how many
     # times the sensor actually makes a measurement.
-    await self._write(Gyro.SMPLRT_DIV, int(self.sample_rate_div - 1))
+    await self._write(Gyro.SMPLRT_DIV, sample_rate_div - 1)
     # Set the DLPF_CFG low pass filter so the accelerometer band gyro sampling
     # both go to 1kHz so they're a bit more in sync.
     await self._write(Gyro.CONFIG, Gyro.DLPF_CFG_188Hz)
