@@ -1,9 +1,12 @@
+"""Python asyncio loop runner that can exit cleanly."""
+
 import asyncio
 import logging
 import traceback
 import sys
 import shlex
-
+import os
+import signal
 
 def run_tasks(*tasks, commands={}):
   """Run async tasks until completion and handle input commands.
@@ -63,6 +66,8 @@ def run_tasks(*tasks, commands={}):
 
 
     loop.add_reader(sys.stdin.fileno(), handle_input)
+    if os.name == "posix":
+      loop.add_signal_handler(signal.SIGINT, cancel_pending)
 
     # Run all pending tasks.
     try:
