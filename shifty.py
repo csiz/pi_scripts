@@ -1,3 +1,5 @@
+"""Interface to shift register (SN74HC595)."""
+
 from gpiozero import DigitalOutputDevice, Device, OutputDeviceError
 from time import sleep, perf_counter
 from threading import Thread

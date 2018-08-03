@@ -1,10 +1,12 @@
+"""Snake game on the raspberry pi sense hat."""
+
 from time import perf_counter, sleep
 from random import randint
 
 from sense_hat import SenseHat
 
 class State:
-    def __init__(self, foods=2, snek=3, speed=2.0): 
+    def __init__(self, foods=2, snek=3, speed=2.0):
         self.snek = [(3, 3)]
         self.snek_dir = "right"
         self.snek_lives = True
@@ -24,11 +26,11 @@ class State:
         pos = self.snek[0]
         # Find a random unoocupied position.
         while (
-            intersects(self.snek, pos) is not None or 
+            intersects(self.snek, pos) is not None or
             intersects(self.foods, pos) is not None
         ):
             pos = randint(0, 7), randint(0, 7)
-        
+
         # Place it there.
         self.foods.append(pos)
 
@@ -69,7 +71,7 @@ class State:
             raise Exception("Weird direction {}".format(self.snek_dir))
 
         next_spot = (next_spot[0] + mx) % 8, (next_spot[1] + my) % 8
-        
+
 
         if intersects(self.snek, next_spot) is not None:
             self.snek_lives = False
@@ -91,7 +93,7 @@ class State:
             # Put current section on the next spot, and set the next spot to this
             # section.
             self.snek[i], next_spot = next_spot, self.snek[i]
-        
+
 
 def draw(state):
     # print(state.foods, state.snek)
@@ -112,14 +114,14 @@ def check_input():
 
     if any(e.action == "pressed" and e.direction == "middle" for e in events):
         return "action"
-    
+
     directions = ("up", "down", "left", "right")
 
     # Take the last event.
     for e in reversed(events):
         if e.action == "pressed" and e.direction in directions:
             return e.direction
-    
+
     return None
 
 def game():
@@ -146,7 +148,7 @@ def game():
                 state.go_in_dir(command)
             else:
                 raise Exception("Weird command: {}".format(command))
-        
+
         if status == "running":
             try:
                 state.move_snek(duration)
@@ -155,7 +157,7 @@ def game():
                 score = len(state.snek)
                 sensey.show_message(
                     "Snek was {} long. It's like this much O".format(score) + "="*(score-1))
-            
+
         draw(state)
 
 
@@ -182,10 +184,10 @@ def timed_loop(genfunc, fps=60):
 
     while True:
         step_duration = perf_counter() - last
-        
+
         if step_duration < duration:
             sleep(duration - step_duration)
-        
+
         last += step_duration
 
         try:
