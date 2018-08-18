@@ -24,7 +24,19 @@ from smbus2_asyncio import SMBus2Asyncio
 class Gyro:
   """Control the MPU-6050 Gyroscope and Accelerometer (on top of the GY-521 breakout board).
 
-  See manual at https://www.invensense.com/wp-content/uploads/2015/02/MPU-6000-Register-Map1.pdf
+  Chip manual: https://www.invensense.com/wp-content/uploads/2015/02/MPU-6000-Register-Map1.pdf
+
+  Examples:
+    Manually start and close the gyroscope and read a set of measures.
+    >>> gyro = Gyro(async_smbus)
+    >>> await gyro.setup()
+    >>> await gyro.get_measures()
+    >>> await gyro.close()
+
+    Use `async with` to handle closing.
+    >>> async with Gyro(async_smbus) as gyro:
+    >>>   async for m in gyro:
+    >>>     print(m.time, m.acceleration, m.rotation)
   """
 
   # Base address of the chip.
@@ -133,18 +145,6 @@ class Gyro:
       AD0: bool = False,
     ):
     """Initialize the Gyro controller; the gyro itself must be `setup` before measuring!
-
-    Examples:
-      Manually start and close the gyroscope and read a set of measures.
-      >>> gyro = Gyro(async_smbus)
-      >>> await gyro.setup()
-      >>> await gyro.get_measures()
-      >>> await gyro.close()
-
-      Use `async with` to handle closing.
-      >>> async with Gyro(async_smbus) as gyro:
-      >>>   async for m in gyro:
-      >>>     print(m.time, m.acceleration, m.rotation)
 
     Args:
       smbus: Opened async smbus.
