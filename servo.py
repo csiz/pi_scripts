@@ -114,7 +114,11 @@ class Servo:
     return await self._bus.read_i2c_block_data(self.address, ptr, size)
 
   async def _write_block(self, ptr, data):
-    return await self._bus.write_i2c_block_data(self.address, ptr, data)
+    # Split data into 32 byte chunks; because that's what I2C wants.
+    for i in range(0, len(data), 32):
+      await self._bus.write_i2c_block_data(self.address, ptr+i, data[i:i+32])
+
+
 
 
   async def setup(self, modulation_rate=50):
@@ -175,6 +179,7 @@ class Servo:
     # return the the the ON_L, ON_H, OFF_L, OFF_H bytes.
     return [0x00, 0x00, pwm_offset & 0xFF, (pwm_offset >> 8) & 0xFF]
 
+
   async def drive(self, n, position):
     """Drive servo `n` (1 based indexing as printed on the hat) to `position`."""
     if not 1 <= n <= Servo.LED_COUNT or not isinstance(n, int):
@@ -192,6 +197,18 @@ class Servo:
       data += self._compute_pwm_bytes(position)
 
     await self._write_block(Servo.LED_BEGIN, data)
+
+
+  async def release(self, n):
+    """Release control of servo `n` (1 based indexing)."""
+    if not 1 <= n <= Servo.LED_COUNT or not isinstance(n, int):
+      raise ValueError(f"Servo.drive: n must be the servo index from 1 to {Servo.LED_COUNT} inclusive.")
+
+    await self._write_block(Servo.LED_BEGIN + 4*(n-1), [0, 0, 0, 0])
+
+  async def release_all(self):
+    """Release control of all servos."""
+    await self._write_block(Servo.LED_BEGIN, [0]*4*Servo.LED_COUNT)
 
 
 # Example
