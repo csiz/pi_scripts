@@ -26,7 +26,7 @@ pantilthat==0.0.5
 parso==0.3.0
 picamera==1.13
 pigpio==1.40.post1
-Pillow==5.2.0
+Pillow==8.1.1
 pyasn1==0.4.3
 pycairo==1.17.0
 pycparser==2.18
